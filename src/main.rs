@@ -80,16 +80,15 @@ fn copy_script<S: AsRef<Path>, T: AsRef<Path>>(
             }
             continue;
         } else if trimmed.starts_with("#endregion") {
-            regions.pop().map_or_else(
-                || {
+            match regions.pop() {
+                Some(region) if region == SCRIPT_REGION => {
+                    in_content = false;
+                }
+                Some(_) => (),
+                None => {
                     println!("Mismatched regions");
-                },
-                |region| {
-                    if region == SCRIPT_REGION {
-                        in_content = false;
-                    }
-                },
-            );
+                }
+            }
             continue;
         }
 
