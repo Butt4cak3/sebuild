@@ -45,7 +45,12 @@ fn copy_script<S: AsRef<Path>, T: AsRef<Path>>(
 
     if !target_dir.exists() {
         fs::create_dir_all(target_dir).map_err(|_| {
-            ScriptCopyError::CouldNotCreateTargetDir(target_dir.to_str().unwrap().to_owned())
+            ScriptCopyError::CouldNotCreateTargetDir(
+                target_dir
+                    .to_str()
+                    .expect("path should be valid UTF-8")
+                    .to_owned(),
+            )
         })?;
     };
 
@@ -69,18 +74,22 @@ fn copy_script<S: AsRef<Path>, T: AsRef<Path>>(
             regions.push(region.to_string());
             if region == SCRIPT_REGION {
                 in_content = true;
-                // line must contain a # because of the starts_with check above
-                content_indent = line.find('#').unwrap();
+                content_indent = line
+                    .find('#')
+                    .expect("line should contain # because of the starts_with check above");
             }
             continue;
         } else if trimmed.starts_with("#endregion") {
-            if let Some(region) = regions.pop() {
-                if region == SCRIPT_REGION {
-                    in_content = false;
-                }
-            } else {
-                println!("Mismatched regions");
-            }
+            regions.pop().map_or_else(
+                || {
+                    println!("Mismatched regions");
+                },
+                |region| {
+                    if region == SCRIPT_REGION {
+                        in_content = false;
+                    }
+                },
+            );
             continue;
         }
 
@@ -89,14 +98,10 @@ fn copy_script<S: AsRef<Path>, T: AsRef<Path>>(
                 target_file
                     .write_all(line[content_indent..].as_bytes())
                     .map_err(ScriptCopyError::IoError)?;
-                target_file
-                    .write_all(b"\n")
-                    .map_err(ScriptCopyError::IoError)?;
-            } else {
-                target_file
-                    .write_all(b"\n")
-                    .map_err(ScriptCopyError::IoError)?;
             }
+            target_file
+                .write_all(b"\n")
+                .map_err(ScriptCopyError::IoError)?;
         }
     }
 
@@ -121,13 +126,16 @@ fn main() {
     source_path.push("Script.cs");
 
     match copy_script(&source_path, &target_path) {
-        Ok(_) => println!("Script written to {}", scripts_path.to_str().unwrap()),
+        Ok(_) => println!(
+            "Script written to {}",
+            scripts_path.to_str().expect("path should be valid UTF-8")
+        ),
         Err(ScriptCopyError::CouldNotCreateTargetDir(path)) => {
-            println!("Could not create target directory {}", path)
+            println!("Could not create target directory {path}");
         }
         Err(ScriptCopyError::CouldNotOpenTargetFile) => println!("Could not open target file"),
         Err(ScriptCopyError::CouldNotOpenSourceFile) => {
-            println!("Could not open Script.cs in this directory")
+            println!("Could not open Script.cs in this directory");
         }
         Err(ScriptCopyError::IoError(_)) => println!("I/O error"),
     }
