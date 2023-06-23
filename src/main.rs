@@ -7,6 +7,13 @@ use std::path::PathBuf;
 
 const SCRIPT_REGION: &str = "Script";
 
+enum ScriptCopyError {
+    CouldNotOpenSourceFile,
+    CouldNotCreateTargetDir(String),
+    CouldNotOpenTargetFile,
+    IoError(io::Error),
+}
+
 fn get_scripts_path() -> PathBuf {
     let appdata = std::env::var("APPDATA").expect("env var APPDATA should be set on Windows");
     let s = format!("{appdata}\\SpaceEngineers\\IngameScripts\\local");
@@ -23,8 +30,13 @@ fn get_project_name() -> Option<String> {
     )
 }
 
-fn copy_script<S: AsRef<Path>, T: AsRef<Path>>(source_path: S, target_path: T) -> io::Result<()> {
-    let source_file = BufReader::new(fs::File::open(source_path)?);
+fn copy_script<S: AsRef<Path>, T: AsRef<Path>>(
+    source_path: S,
+    target_path: T,
+) -> Result<(), ScriptCopyError> {
+    let source_file = BufReader::new(
+        fs::File::open(source_path).map_err(|_| ScriptCopyError::CouldNotOpenSourceFile)?,
+    );
 
     let target_dir = target_path
         .as_ref()
@@ -32,7 +44,9 @@ fn copy_script<S: AsRef<Path>, T: AsRef<Path>>(source_path: S, target_path: T) -
         .expect("target path should have at least 2 levels");
 
     if !target_dir.exists() {
-        fs::create_dir_all(target_dir)?
+        fs::create_dir_all(target_dir).map_err(|_| {
+            ScriptCopyError::CouldNotCreateTargetDir(target_dir.to_str().unwrap().to_owned())
+        })?;
     };
 
     let mut target_file = BufWriter::new(
@@ -40,7 +54,8 @@ fn copy_script<S: AsRef<Path>, T: AsRef<Path>>(source_path: S, target_path: T) -
             .create(true)
             .write(true)
             .truncate(true)
-            .open(target_path)?,
+            .open(target_path)
+            .map_err(|_| ScriptCopyError::CouldNotOpenTargetFile)?,
     );
 
     let mut regions: Vec<String> = Vec::new();
@@ -71,10 +86,16 @@ fn copy_script<S: AsRef<Path>, T: AsRef<Path>>(source_path: S, target_path: T) -
 
         if in_content {
             if line.len() > content_indent {
-                target_file.write_all(line[content_indent..].as_bytes())?;
-                target_file.write_all(b"\n")?;
+                target_file
+                    .write_all(line[content_indent..].as_bytes())
+                    .map_err(ScriptCopyError::IoError)?;
+                target_file
+                    .write_all(b"\n")
+                    .map_err(ScriptCopyError::IoError)?;
             } else {
-                target_file.write_all(b"\n")?;
+                target_file
+                    .write_all(b"\n")
+                    .map_err(ScriptCopyError::IoError)?;
             }
         }
     }
@@ -101,6 +122,13 @@ fn main() {
 
     match copy_script(&source_path, &target_path) {
         Ok(_) => println!("Script written to {}", scripts_path.to_str().unwrap()),
-        Err(_) => println!("Could not copy script."),
+        Err(ScriptCopyError::CouldNotCreateTargetDir(path)) => {
+            println!("Could not create target directory {}", path)
+        }
+        Err(ScriptCopyError::CouldNotOpenTargetFile) => println!("Could not open target file"),
+        Err(ScriptCopyError::CouldNotOpenSourceFile) => {
+            println!("Could not open Script.cs in this directory")
+        }
+        Err(ScriptCopyError::IoError(_)) => println!("I/O error"),
     }
 }
