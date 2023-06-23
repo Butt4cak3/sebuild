@@ -25,6 +25,16 @@ fn get_project_name() -> Option<String> {
 
 fn copy_script<S: AsRef<Path>, T: AsRef<Path>>(source_path: S, target_path: T) -> io::Result<()> {
     let source_file = BufReader::new(fs::File::open(source_path)?);
+
+    let target_dir = target_path
+        .as_ref()
+        .parent()
+        .expect("target path should have at least 2 levels");
+
+    if !target_dir.exists() {
+        fs::create_dir_all(target_dir)?
+    };
+
     let mut target_file = BufWriter::new(
         fs::OpenOptions::new()
             .create(true)
@@ -88,14 +98,6 @@ fn main() {
         return;
     };
     source_path.push("Script.cs");
-
-    if !scripts_path.exists() && fs::create_dir_all(&scripts_path).is_err() {
-        println!(
-            "Could not create target directory {}",
-            scripts_path.to_str().unwrap()
-        );
-        return;
-    }
 
     match copy_script(&source_path, &target_path) {
         Ok(_) => println!("Script written to {}", scripts_path.to_str().unwrap()),
